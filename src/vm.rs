@@ -12,8 +12,26 @@ macro_rules! write_to_file {
         let _ = $file.write_all($contents);
     }};
 }
-
-fn write_prog_to_file(prog: Vec<Instruction>)
+#[macro_export]
+macro_rules! Vm {
+    () => {
+        Vm{
+        program : Vec::new(),
+        stack : Vec::new(),
+        program_counter : 0,
+        halt    : false
+        }
+    };
+    ($vec:expr) => {
+        Vm{
+        program : $vec,
+        stack : Vec::new(),
+        program_counter : 0,
+        halt    : false
+        }
+    };
+}
+pub fn write_prog_to_file(prog: Vec<Instruction>)
 {
     let byte_slice: &[u8] = unsafe {
         std::slice::from_raw_parts(
@@ -25,13 +43,18 @@ fn write_prog_to_file(prog: Vec<Instruction>)
     write_to_file!(file,byte_slice);
 }
 
-fn read_prog_from_file(name: String) -> Vec<Instruction>
+pub fn read_prog_from_file(name: String) -> Vec<Instruction>
 {
-    use std::fs;
     let instr_size = std::mem::size_of::<Instruction>();
-    let mut bytes = fs::read(name).unwrap();
+    let mut bytes = std::fs::read(name).unwrap();
     assert_eq!(bytes.len()%instr_size,0);
-    let vec = unsafe {Vec::from_raw_parts(bytes.as_mut_ptr() as *mut Instruction,bytes.len()/instr_size,bytes.capacity()/instr_size)};
+    let vec = unsafe {
+        Vec::from_raw_parts(
+            bytes.as_mut_ptr() as *mut Instruction,
+            bytes.len()/instr_size,
+            bytes.capacity()/instr_size
+        )
+    };
     std::mem::forget(bytes);
     return vec;
 }
@@ -42,31 +65,32 @@ fn read_prog_from_file(name: String) -> Vec<Instruction>
 pub enum Instruction
 {
     Nop,
-    Push(i64),
-    Dup(i64),
+    Push{val:i64},
+    Dup{val:i64},
     Plus,
     Minus,
     Mult,
     Div,
+    Jmp{val:i64},
     Halt
 }
 
 pub enum Fault
 {
-    OK,
-    OVERFLOW,
-    UNDERFLOW,
-    BAD_OPERAND,
-    DIV_BY_ZERO,
+    Ok,
+    Overflow,
+    Underflow,
+    Bad_Operand,
+    Div_By_Zero,
 }
 
 
-pub struct VM
+pub struct Vm
 {
     pub program : Vec<Instruction>,
-    stack   : Vec<i64>,
-    program_counter : usize,
-    halt    : bool
+    pub stack   : Vec<i64>,
+    pub program_counter : usize,
+    pub halt    : bool
 }
 
 
@@ -74,25 +98,23 @@ pub fn error_info(fault : Fault) -> String
 {
     match fault
     {
-        Fault::OK => "OK",
-        Fault::BAD_OPERAND => "BAD_OPERAND",
-        Fault::OVERFLOW => "OVERFLOW",
-        Fault::UNDERFLOW => "UNDERFLOW",
-        Fault::DIV_BY_ZERO => "DIV_BY_ZERO",
+        Fault::Ok => "OK",
+        Fault::Bad_Operand => "BAD_OPERAND",
+        Fault::Overflow => "OVERFLOW",
+        Fault::Underflow => "UNDERFLOW",
+        Fault::Div_By_Zero => "DIV_BY_ZERO",
     }.to_string()
 }
 
-pub fn dump_vm(vm : &VM)
+pub fn dump_vm(vm : &Vm)
 {
     println!("Stack :");
-    if vm.stack.len() > 0 {
-        for val in vm.stack.iter()
-        {
-            println!("{}",val);
-        }
+    for val in vm.stack.iter()
+    {
+        println!("{}",val);
     }
 }
-impl VM
+impl Vm
 {
     pub fn new() -> Self
     {
@@ -110,7 +132,7 @@ impl VM
             let res = self.exec_instruction();
             match res
             {
-                Fault::OK => {}
+                Fault::Ok => {}
                 _   => 
                 {
                     println!("Error : {}",error_info(res));
@@ -125,7 +147,7 @@ impl VM
     {
         match self.program[self.program_counter]
         {
-            Instruction::Push(val) =>
+            Instruction::Push{val} =>
             {
                 self.stack.push(val);
                 self.program_counter += 1;
@@ -133,7 +155,7 @@ impl VM
             Instruction::Plus =>
             {
                 if self.stack.len() < 2 {
-                    return Fault::UNDERFLOW;
+                    return Fault::Underflow;
                 }
                 let a = pop!(self.stack);
                 let b = pop!(self.stack);
@@ -143,7 +165,7 @@ impl VM
             Instruction::Minus =>
             {
                 if self.stack.len() < 2 {
-                    return Fault::UNDERFLOW;
+                    return Fault::Underflow;
                 }
                 let a = pop!(self.stack);
                 let b = pop!(self.stack);
@@ -153,7 +175,7 @@ impl VM
             Instruction::Mult =>
             {
                 if self.stack.len() < 2 {
-                    return Fault::UNDERFLOW;
+                    return Fault::Underflow;
                 }
                 let a = pop!(self.stack);
                 let b = pop!(self.stack);
@@ -163,30 +185,38 @@ impl VM
             Instruction::Div =>
             {
                 if self.stack.len() < 2 {
-                    return Fault::UNDERFLOW;
+                    return Fault::Underflow;
                 }
                 let a = pop!(self.stack);
                 let b = pop!(self.stack);
                 if b==0 {
-                    return Fault::DIV_BY_ZERO;
+                    return Fault::Div_By_Zero;
                 }
                 self.stack.push(a/b);
                 self.program_counter += 1;
             }
-            Instruction::Dup(val) => 
+            Instruction::Dup{val} => 
             {
                 let idx = val as usize;
                 if val < 0{
-                    return Fault::UNDERFLOW;
+                    return Fault::Underflow;
                 }
-                if idx > self.stack.len(){
-                    return Fault::OVERFLOW;
+                if idx >= self.stack.len(){
+                    return Fault::Overflow;
                 }
                 self.stack.push(self.stack[self.stack.len()-1-idx]);
+                self.program_counter += 1;
             }
             Instruction::Halt => self.halt = true,
-            Instruction::Nop => self.program_counter +=1,
+            Instruction::Nop => self.program_counter += 1,
+            Instruction::Jmp{val} =>
+            {
+                if val < 0 || val as usize >= self.program.len(){
+                    return Fault::Bad_Operand;
+                }
+                self.program_counter = val as usize;
+            }
         }
-        return Fault::OK;
+        return Fault::Ok;
     }
 }
