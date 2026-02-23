@@ -3,4 +3,12 @@ name = "RM"
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
+
+
+[[bin]]
+name = "assembler"
+path = "src/assembler.rs"
+
+[[bin]]
+name = "interpreter"
+path = "src/interpreter.rs"
