@@ -1,6 +1,11 @@
 push 0
 push 1
+dup 0
+push 100
+setg 
+jz 10
 dup 1
 dup 1
 plus
 jmp 2
+halt

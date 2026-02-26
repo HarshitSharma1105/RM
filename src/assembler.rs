@@ -2,29 +2,35 @@ use RM::vm::*;
 use RM::path::*;
 use RM::read_file;
 
-pub fn parse_line(line:&str) -> Instruction
-{
-    let words : Vec<&str> = line.split(" ").collect();
-    for i in 0..words.len(){
-        match words[i]
-        {
-            "push" => return Instruction::Push{val:words[i+1].parse().unwrap()},
-            "dup"  => return Instruction::Dup{val:words[i+1].parse().unwrap()},
-            "jmp"  => return Instruction::Jmp{val:words[i+1].parse().unwrap()},
-            "plus" => return Instruction::Plus,
-            _ => {}
-        }
-    }
-    Instruction::Halt
-}
-
 pub fn parse_file(file_name: &String) -> Vec<Instruction>
 {
-    let mut vec : Vec<Instruction> = Vec::new();
+    let mut vec = Vec::new();
     let contents = read_file!(file_name);
-    let  lines = contents.split("\n");
-    for line in lines{
-        vec.push(parse_line(line));
+    let  lines : Vec<&str>= contents.split("\n").collect();
+    for i in 0..lines.len(){
+        let line = lines[i];
+        let words : Vec<&str> = line.split(" ").collect();
+        for i in 0..words.len(){
+            match words[i]
+            {
+                "push"  => vec.push(Instruction::Push{val:words[i+1].parse().unwrap()}),
+                "dup"   => vec.push(Instruction::Dup{val:words[i+1].parse().unwrap()}),
+                "jmp"   => vec.push(Instruction::Jmp{val:words[i+1].parse().unwrap()}),
+                "plus"  => vec.push(Instruction::Plus),
+                "minus" => vec.push(Instruction::Minus),
+                "mult"  => vec.push(Instruction::Mult),
+                "div"   => vec.push(Instruction::Div),
+                "nop"   => vec.push(Instruction::Nop),
+                "cmp"   => vec.push(Instruction::Cmp),
+                "setg"  => vec.push(Instruction::SetGreater),
+                "setl"  => vec.push(Instruction::SetLess),
+                "sete"  => vec.push(Instruction::SetEquals),
+                "jz"    => vec.push(Instruction::JmpIfZero{val:words[i+1].parse().unwrap()}),
+                "halt"  => vec.push(Instruction::Halt),
+                "#" =>{}
+                _ => todo!(),
+            }
+        }
     }
     return vec;
 }
