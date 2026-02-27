@@ -20,9 +20,11 @@ macro_rules! read_bytes {
 }
 #[macro_export]
 macro_rules! read_file {
-    ($path:expr) => {
-        std::fs::read_to_string($path).expect("Unable to open file")
-    };
+    ($path:expr) => {{
+        let mut val = std::fs::read_to_string($path).expect("Unable to open file");
+        val.push('\n');
+        val
+    }};
 }
 #[macro_export]
 macro_rules! pop {
@@ -92,13 +94,13 @@ pub enum Instruction
     Minus,
     Mult,
     Div,
-    Jmp{val:i64},
+    Jmp{val:usize},
     Cmp,
     SetEquals,
     SetGreater,
     SetLess,
     SetZero,
-    JmpIfZero{val:i64},
+    JmpIfZero{val:usize},
     Halt
 }
 
@@ -237,7 +239,7 @@ impl Vm
             Instruction::Nop => self.program_counter += 1,
             Instruction::Jmp{val} =>
             {
-                if val < 0 || val as usize >= self.program.len(){
+                if val as usize >= self.program.len(){
                     return Fault::Bad_Operand;
                 }
                 self.program_counter = val as usize;
@@ -262,12 +264,12 @@ impl Vm
             }
             Instruction::JmpIfZero{val} =>
             {
-                if val < 0 || val as usize >= self.program.len(){
+                if val as usize >= self.program.len(){
                     return Fault::Bad_Operand;
                 }
                 let a = pop!(self.stack);
                 if a == 0{
-                    self.program_counter = val as usize;
+                    self.program_counter = val;
                 }
                 else{
                     self.program_counter += 1;

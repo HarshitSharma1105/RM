@@ -1,11 +1,14 @@
-push 0
-push 1
-dup 0
-push 100
-setg 
-jz 10
-dup 1
-dup 1
-plus
-jmp 2
-halt
+# initialize stack
+    push 0
+    push 1
+begin:
+    dup 0
+    push 1000
+    setg
+    jz end
+    dup 1
+    dup 1
+    plus
+    jmp begin # repeat
+end:
+    halt

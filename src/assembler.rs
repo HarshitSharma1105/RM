@@ -1,34 +1,167 @@
 use RM::vm::*;
 use RM::path::*;
 use RM::read_file;
+use std::collections::HashMap;
 
 pub fn parse_file(file_name: &String) -> Vec<Instruction>
 {
     let mut vec = Vec::new();
-    let contents = read_file!(file_name);
-    let  lines : Vec<&str>= contents.split("\n").collect();
-    for i in 0..lines.len(){
-        let line = lines[i];
-        let words : Vec<&str> = line.split(" ").collect();
-        for i in 0..words.len(){
-            match words[i]
+    let contents : Vec<char> = read_file!(file_name).chars().collect();
+    let mut buff : String = String::new();
+    let size = contents.len();
+    let mut unfinished_labels : HashMap<String,Vec<usize>> = HashMap::new();
+    let mut labels : HashMap<String,usize> = HashMap::new();
+    let mut idx = 0;
+    while idx < size
+    {
+        if contents[idx] == ' ' || contents[idx] == '\n'
+        {
+            idx += 1;
+            if buff.is_empty()
             {
-                "push"  => vec.push(Instruction::Push{val:words[i+1].parse().unwrap()}),
-                "dup"   => vec.push(Instruction::Dup{val:words[i+1].parse().unwrap()}),
-                "jmp"   => vec.push(Instruction::Jmp{val:words[i+1].parse().unwrap()}),
-                "plus"  => vec.push(Instruction::Plus),
-                "minus" => vec.push(Instruction::Minus),
-                "mult"  => vec.push(Instruction::Mult),
-                "div"   => vec.push(Instruction::Div),
-                "nop"   => vec.push(Instruction::Nop),
-                "cmp"   => vec.push(Instruction::Cmp),
-                "setg"  => vec.push(Instruction::SetGreater),
-                "setl"  => vec.push(Instruction::SetLess),
-                "sete"  => vec.push(Instruction::SetEquals),
-                "jz"    => vec.push(Instruction::JmpIfZero{val:words[i+1].parse().unwrap()}),
-                "halt"  => vec.push(Instruction::Halt),
-                "#" =>{}
-                _ => todo!(),
+                while contents[idx] == ' ' || contents[idx] == '\n'
+                {
+                    idx += 1;
+                }
+            }
+            else if buff == "push"
+            {
+                buff.clear();
+                while contents[idx]!=' ' && contents[idx] != '\n'
+                {
+                    buff.push(contents[idx]);
+                    idx += 1;
+                }
+                idx += 1;
+                vec.push(Instruction::Push{val:buff.parse().unwrap()});
+                buff.clear();
+            }
+            else if buff == "dup"
+            {
+                buff.clear();
+                while contents[idx]!=' ' && contents[idx] != '\n'
+                {
+                    buff.push(contents[idx]);
+                    idx += 1;
+                }
+                idx += 1;
+                vec.push(Instruction::Dup{val:buff.parse().unwrap()});
+                buff.clear();
+            }
+            else if buff == "jmp"
+            {
+                buff.clear();
+                while contents[idx]!=' ' && contents[idx] != '\n'
+                {
+                    buff.push(contents[idx]);
+                    idx += 1;
+                }
+                idx += 1;
+                let mut val = 0;
+                if labels.contains_key(&buff)
+                {
+                    val = labels[&buff];
+                }
+                else
+                {
+                    match unfinished_labels.get_mut(&buff)
+                    {
+                        Some(label_vec) => {
+                            label_vec.push(vec.len());
+                        }
+                        None => {
+                            unfinished_labels.insert(buff.clone(),Vec::new());
+                        }
+                    }
+                }
+                vec.push(Instruction::Jmp{val:val});
+                buff.clear();
+            }
+            else if buff == "jz"
+            {
+                buff.clear();
+                while contents[idx]!=' ' && contents[idx] != '\n'
+                {
+                    buff.push(contents[idx]);
+                    idx += 1;
+                }
+                idx += 1;
+                let mut val = 0;
+                if labels.contains_key(&buff)
+                {
+                    val = labels[&buff];
+                }
+                else
+                {
+                    if unfinished_labels.contains_key(&buff) == false{
+                        unfinished_labels.insert(buff.clone(),Vec::new());
+                    }
+                    match unfinished_labels.get_mut(&buff)
+                    {
+                        Some(label_vec) => label_vec.push(vec.len()),
+                        None => assert!(false),
+                    }
+                }
+                vec.push(Instruction::JmpIfZero{val:val});
+                buff.clear();
+            }
+            else if buff == "plus"{
+                vec.push(Instruction::Plus);
+            }
+            else if buff == "minus"{
+                vec.push(Instruction::Minus);
+            }
+            else if buff == "mult"{
+                vec.push(Instruction::Mult);
+            }
+            else if buff == "div"{
+                vec.push(Instruction::Div);
+            }
+            else if buff == "nop" { 
+                vec.push(Instruction::Nop);
+            }
+            else if buff == "cmp" { 
+                vec.push(Instruction::Cmp);
+            }
+            else if buff == "setg"{ 
+                vec.push(Instruction::SetGreater);
+            }
+            else if buff == "setl"{ 
+                vec.push(Instruction::SetLess);
+            }
+            else if buff == "sete"{ 
+                vec.push(Instruction::SetEquals);
+            }
+            else if buff == "halt"{
+                vec.push(Instruction::Halt);
+            }
+            else if buff.starts_with('#'){
+                while idx < size && contents[idx] != '\n'{
+                    idx += 1;
+                }
+            }
+            else if buff.ends_with(':'){
+                buff.pop();
+                labels.insert(buff.clone(),vec.len());
+            }
+            else {
+                assert!(false);
+            }
+            buff.clear();
+        }
+        else 
+        {
+            buff.push(contents[idx]);
+            idx += 1;
+        }
+    }
+    for (name,idx_vec) in unfinished_labels.iter(){
+        for i in 0..idx_vec.len(){
+            let idx = idx_vec[i];
+            match &mut vec[idx]
+            {
+                Instruction::Jmp{val}|Instruction::JmpIfZero{val} => *val = labels[name],
+                _ => {},
             }
         }
     }
