@@ -1,16 +1,16 @@
 use RM::vm::*;
 use RM::path::*;
-use RM::read_file;
+use RM::{read_file,errorf};
 use std::collections::HashMap;
 
 pub fn parse_file(file_name: &String) -> Vec<Instruction>
 {
     let mut vec = Vec::new();
     let contents : Vec<char> = read_file!(file_name).chars().collect();
-    let mut buff : String = String::new();
+    let mut buff = String::new();
     let size = contents.len();
-    let mut unfinished_labels : HashMap<String,Vec<usize>> = HashMap::new();
-    let mut labels : HashMap<String,usize> = HashMap::new();
+    let mut unfinished_labels = Vec::new();
+    let mut labels = HashMap::new();
     let mut idx = 0;
     while idx < size
     {
@@ -34,7 +34,6 @@ pub fn parse_file(file_name: &String) -> Vec<Instruction>
                 }
                 idx += 1;
                 vec.push(Instruction::Push{val:buff.parse().unwrap()});
-                buff.clear();
             }
             else if buff == "dup"
             {
@@ -46,7 +45,6 @@ pub fn parse_file(file_name: &String) -> Vec<Instruction>
                 }
                 idx += 1;
                 vec.push(Instruction::Dup{val:buff.parse().unwrap()});
-                buff.clear();
             }
             else if buff == "jmp"
             {
@@ -57,25 +55,8 @@ pub fn parse_file(file_name: &String) -> Vec<Instruction>
                     idx += 1;
                 }
                 idx += 1;
-                let mut val = 0;
-                if labels.contains_key(&buff)
-                {
-                    val = labels[&buff];
-                }
-                else
-                {
-                    match unfinished_labels.get_mut(&buff)
-                    {
-                        Some(label_vec) => {
-                            label_vec.push(vec.len());
-                        }
-                        None => {
-                            unfinished_labels.insert(buff.clone(),Vec::new());
-                        }
-                    }
-                }
-                vec.push(Instruction::Jmp{val:val});
-                buff.clear();
+                unfinished_labels.push((buff.clone(),vec.len()));
+                vec.push(Instruction::Jmp{val:0});
             }
             else if buff == "jz"
             {
@@ -86,24 +67,8 @@ pub fn parse_file(file_name: &String) -> Vec<Instruction>
                     idx += 1;
                 }
                 idx += 1;
-                let mut val = 0;
-                if labels.contains_key(&buff)
-                {
-                    val = labels[&buff];
-                }
-                else
-                {
-                    if unfinished_labels.contains_key(&buff) == false{
-                        unfinished_labels.insert(buff.clone(),Vec::new());
-                    }
-                    match unfinished_labels.get_mut(&buff)
-                    {
-                        Some(label_vec) => label_vec.push(vec.len()),
-                        None => assert!(false),
-                    }
-                }
-                vec.push(Instruction::JmpIfZero{val:val});
-                buff.clear();
+                unfinished_labels.push((buff.clone(),vec.len()));
+                vec.push(Instruction::JmpIfZero{val:0});
             }
             else if buff == "plus"{
                 vec.push(Instruction::Plus);
@@ -145,7 +110,7 @@ pub fn parse_file(file_name: &String) -> Vec<Instruction>
                 labels.insert(buff.clone(),vec.len());
             }
             else {
-                assert!(false);
+                errorf!("Unknown Token {}",buff);
             }
             buff.clear();
         }
@@ -155,22 +120,38 @@ pub fn parse_file(file_name: &String) -> Vec<Instruction>
             idx += 1;
         }
     }
-    for (name,idx_vec) in unfinished_labels.iter(){
-        for i in 0..idx_vec.len(){
-            let idx = idx_vec[i];
-            match &mut vec[idx]
+    for (name,idx) in unfinished_labels
+    {
+        match &mut vec[idx]
+        {
+            Instruction::Jmp{val}|Instruction::JmpIfZero{val} => 
             {
-                Instruction::Jmp{val}|Instruction::JmpIfZero{val} => *val = labels[name],
-                _ => {},
+                if labels.contains_key(&name)
+                {
+                    *val = labels[&name];
+                }
+                else 
+                {
+                    errorf!("Undeclared label {}",name);
+                }
             }
+            _ => errorf!("Bug in assembler"),
         }
     }
     return vec;
 }
-
+fn usage()
+{
+    println!("USAGE : <path to assembler> <path to input vasm file>");
+}
 fn main()
 {
     let args : Vec<String> = std::env::args().collect();
+    if args.len() < 2
+    {
+        usage();
+        errorf!("Not enough arguments for assembler");
+    }
     let vec = parse_file(&args[1]);
     let output_file_name = file_name(&args[1],"vasm")+".byte";
     write_prog_to_file(vec,&output_file_name);

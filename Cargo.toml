@@ -12,3 +12,7 @@ path = "src/assembler.rs"
 [[bin]]
 name = "interpreter"
 path = "src/interpreter.rs"
+
+[[bin]]
+name = "disassembler"
+path = "src/disassembler.rs"

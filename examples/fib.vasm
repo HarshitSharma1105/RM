@@ -2,13 +2,13 @@
     push 0
     push 1
 begin:
+    dup 1
+    dup 1
+    plus
     dup 0
     push 1000
     setg
     jz end
-    dup 1
-    dup 1
-    plus
     jmp begin # repeat
 end:
     halt

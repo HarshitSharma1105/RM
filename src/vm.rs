@@ -1,8 +1,7 @@
 #[macro_export]
 macro_rules! create_file {
     ($name:expr) => {{
-        use std::fs::File;
-        File::create($name).expect("Failed to create file")
+        std::fs::File::create($name).expect("Failed to create file")
     }};
 }
 #[macro_export]
@@ -32,15 +31,19 @@ macro_rules! pop {
         $vec.pop().unwrap()
     }};
 }
-
-
+#[macro_export]
+macro_rules! errorf {
+    ($($arg:tt)*) => {{
+        eprintln!($($arg)*);
+        std::process::exit(1);
+    }};
+}
 #[macro_export]
 macro_rules! size_of {
     ($type:ty) => {
         std::mem::size_of::<$type>()
     };
 }
-
 #[macro_export]
 macro_rules! Vm {
     () => {
@@ -53,7 +56,9 @@ macro_rules! Vm {
         }
     };
 }
-pub fn write_prog_to_file(prog: Vec<Instruction>,file_name: &String)
+
+
+pub fn write_prog_to_file(prog: Vec<Instruction>,file_name: &str)
 {
     let byte_slice: &[u8] = unsafe {
         std::slice::from_raw_parts(
@@ -65,26 +70,33 @@ pub fn write_prog_to_file(prog: Vec<Instruction>,file_name: &String)
     write_bytes_to_file!(file,byte_slice);
 }
 
-pub fn read_prog_from_file(file_name: &String) -> Vec<Instruction>
+pub fn read_prog_from_file(file_name: &str) -> Vec<Instruction> 
 {
-    let instr_size = size_of!(Instruction); 
-    let mut bytes = read_bytes!(file_name);
-    assert_eq!(bytes.len()%instr_size,0);
-    let vec = unsafe {
-        Vec::from_raw_parts(
-            bytes.as_mut_ptr() as *mut Instruction,
-            bytes.len()/instr_size,
-            bytes.capacity()/instr_size
-        )
-    };
-    std::mem::forget(bytes);
+    let mut file = std::fs::File::open(file_name).expect("Failed to open file");
+    let file_size = file.metadata().expect("Failed to get metadata").len() as usize;
+    let instr_size = size_of!(Instruction);
+
+    assert_eq!(file_size % instr_size, 0);
+    let num_instrs = file_size / instr_size;
+
+    let mut vec = vec![Instruction::Nop;num_instrs];
+    unsafe {
+        let byte_slice = std::slice::from_raw_parts_mut(
+            vec.as_mut_ptr() as *mut u8,
+            file_size,
+        );
+        use std::io::Read;
+        file.read_exact(byte_slice).expect("Failed to read all bytes");
+
+        vec.set_len(num_instrs);
+    }
     return vec;
 }
 
 
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Clone)]
 pub enum Instruction
 {
     Nop,
@@ -165,9 +177,8 @@ impl Vm
             Fault::Ok => {}
             _   => 
             {
-                println!("Error : {}",error_info(res));
                 dump_vm(self);
-                std::process::exit(1);
+                errorf!("Error : {}",error_info(res));
             }
         }
     }
