@@ -3,7 +3,7 @@ use RM::path::*;
 use RM::{read_file,errorf};
 use std::collections::HashMap;
 
-pub fn parse_file(file_name: &String) -> Vec<Instruction>
+pub fn parse_file(file_name: &str) -> Vec<Instruction>
 {
     let mut vec = Vec::new();
     let contents : Vec<char> = read_file!(file_name).chars().collect();
@@ -16,13 +16,13 @@ pub fn parse_file(file_name: &String) -> Vec<Instruction>
     {
         if contents[idx] == ' ' || contents[idx] == '\n'
         {
-            idx += 1;
+            while idx < size && (contents[idx] == ' ' || contents[idx] == '\n')
+            {
+                idx += 1;
+            }
             if buff.is_empty()
             {
-                while contents[idx] == ' ' || contents[idx] == '\n'
-                {
-                    idx += 1;
-                }
+                continue;
             }
             else if buff == "push"
             {
@@ -33,7 +33,7 @@ pub fn parse_file(file_name: &String) -> Vec<Instruction>
                     idx += 1;
                 }
                 idx += 1;
-                vec.push(Instruction::Push{val:buff.parse().unwrap()});
+                vec.push(Instruction::Push{val:Word::Int(buff.parse().unwrap())});
             }
             else if buff == "dup"
             {
@@ -55,8 +55,15 @@ pub fn parse_file(file_name: &String) -> Vec<Instruction>
                     idx += 1;
                 }
                 idx += 1;
-                unfinished_labels.push((buff.clone(),vec.len()));
-                vec.push(Instruction::Jmp{val:0});
+                if buff.chars().nth(0).expect("Expected atleast one byte").is_digit(10)
+                {
+                    vec.push(Instruction::Jmp{val:buff.parse().unwrap()});
+                }
+                else
+                {
+                    unfinished_labels.push((buff.clone(),vec.len()));
+                    vec.push(Instruction::Jmp{val:0});
+                }
             }
             else if buff == "jz"
             {
@@ -67,8 +74,15 @@ pub fn parse_file(file_name: &String) -> Vec<Instruction>
                     idx += 1;
                 }
                 idx += 1;
-                unfinished_labels.push((buff.clone(),vec.len()));
-                vec.push(Instruction::JmpIfZero{val:0});
+                if buff.chars().nth(0).expect("Expected atleast one byte").is_digit(10)
+                {
+                    vec.push(Instruction::JmpIfZero{val:buff.parse().unwrap()});
+                }
+                else
+                {
+                    unfinished_labels.push((buff.clone(),vec.len()));
+                    vec.push(Instruction::JmpIfZero{val:0});
+                }
             }
             else if buff == "plus"{
                 vec.push(Instruction::Plus);

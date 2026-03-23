@@ -5,6 +5,19 @@ macro_rules! create_file {
     }};
 }
 #[macro_export]
+macro_rules! open_file {
+    ($name:expr) => {
+        std::fs::File::open($name).expect("Failed to open file")
+    }
+}
+#[macro_export]
+macro_rules! file_len {
+    ($file:expr) => {
+       $file.metadata().expect("Failed to get metadata").len() 
+    }
+}
+
+#[macro_export]
 macro_rules! write_bytes_to_file {
     ($file:expr, $contents:expr) => {{
         use std::io::Write;
@@ -49,7 +62,7 @@ macro_rules! Vm {
     () => {
         Vm::default()
     };
-    ($vec:expr) => {
+    ($vec:expr) => { 
         Vm {
             program: $vec,
             ..Default::default()
@@ -60,7 +73,7 @@ macro_rules! Vm {
 
 pub fn write_prog_to_file(prog: Vec<Instruction>,file_name: &str)
 {
-    let byte_slice: &[u8] = unsafe {
+    let byte_slice  = unsafe {
         std::slice::from_raw_parts(
             prog.as_ptr() as *const u8,
             prog.len() * size_of!(Instruction),
@@ -72,35 +85,33 @@ pub fn write_prog_to_file(prog: Vec<Instruction>,file_name: &str)
 
 pub fn read_prog_from_file(file_name: &str) -> Vec<Instruction> 
 {
-    let mut file = std::fs::File::open(file_name).expect("Failed to open file");
-    let file_size = file.metadata().expect("Failed to get metadata").len() as usize;
+    let mut file = open_file!(file_name);
+    let file_size = file_len!(file) as usize;
     let instr_size = size_of!(Instruction);
 
     assert_eq!(file_size % instr_size, 0);
     let num_instrs = file_size / instr_size;
 
     let mut vec = vec![Instruction::Nop;num_instrs];
-    unsafe {
-        let byte_slice = std::slice::from_raw_parts_mut(
+    let byte_slice = unsafe {
+        std::slice::from_raw_parts_mut(
             vec.as_mut_ptr() as *mut u8,
             file_size,
-        );
-        use std::io::Read;
-        file.read_exact(byte_slice).expect("Failed to read all bytes");
-
-        vec.set_len(num_instrs);
-    }
+        )
+    };
+    use std::io::Read;
+    file.read_exact(byte_slice).expect("Failed to read all bytes");
     return vec;
 }
 
 
 
 #[repr(C)]
-#[derive(Clone)]
+#[derive(Copy,Clone)]
 pub enum Instruction
 {
     Nop,
-    Push{val:i64},
+    Push{val:Word},
     Dup{val:i64},
     Plus,
     Minus,
@@ -124,12 +135,32 @@ pub enum Fault
     Bad_Operand,
     Div_By_Zero,
 }
+#[derive(Copy,Clone)]
+pub enum Word
+{
+    Int(i64),
+    Uint(u64),
+    Ptr(u64),
+    Float(f64)
+}
+impl std::fmt::Display for Word
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self 
+        {
+            Word::Int(int_val) => write!(f,"Int : {}",int_val),
+            Word::Uint(uint_val) => write!(f,"Uint : {}",uint_val),
+            Word::Ptr(ptr_val) => write!(f,"Ptr : {}",ptr_val),
+            Word::Float(float_val) => write!(f,"Float : {}",float_val),
+        }
+    }
+}
 
 #[derive(Default)]
 pub struct Vm
 {
     pub program : Vec<Instruction>,
-    pub stack   : Vec<i64>,
+    pub stack   : Vec<Word>,
     pub program_counter : usize,
     pub halt    : bool,
     pub zero    : bool,
@@ -198,7 +229,17 @@ impl Vm
                 }
                 let a = pop!(self.stack);
                 let b = pop!(self.stack);
-                self.stack.push(a+b);
+                let a = match a 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
+                let b = match b 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
+                self.stack.push(Word::Int(a+b));
                 self.program_counter += 1;
             }
             Instruction::Minus =>
@@ -208,7 +249,17 @@ impl Vm
                 }
                 let a = pop!(self.stack);
                 let b = pop!(self.stack);
-                self.stack.push(a-b);
+                let a = match a 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
+                let b = match b 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
+                self.stack.push(Word::Int(a-b));
                 self.program_counter += 1;
             }            
             Instruction::Mult =>
@@ -218,7 +269,17 @@ impl Vm
                 }
                 let a = pop!(self.stack);
                 let b = pop!(self.stack);
-                self.stack.push(a*b);
+                let a = match a 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
+                let b = match b 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
+                self.stack.push(Word::Int(a*b));
                 self.program_counter += 1;
             }
             Instruction::Div =>
@@ -228,10 +289,20 @@ impl Vm
                 }
                 let a = pop!(self.stack);
                 let b = pop!(self.stack);
+                let a = match a 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
+                let b = match b 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
                 if b==0 {
                     return Fault::Div_By_Zero;
                 }
-                self.stack.push(a/b);
+                self.stack.push(Word::Int(a/b));
                 self.program_counter += 1;
             }
             Instruction::Dup{val} => 
@@ -262,6 +333,16 @@ impl Vm
                 }
                 let a = pop!(self.stack);
                 let b = pop!(self.stack);
+                let a = match a 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
+                let b = match b 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
                 if a > b{
                     self.greater = true;
                 }
@@ -279,6 +360,11 @@ impl Vm
                     return Fault::Bad_Operand;
                 }
                 let a = pop!(self.stack);
+                let a = match a 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
                 if a == 0{
                     self.program_counter = val;
                 }
@@ -293,7 +379,17 @@ impl Vm
                 }
                 let a = pop!(self.stack);
                 let b = pop!(self.stack);
-                self.stack.push((a==b)as i64);
+                let a = match a 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
+                let b = match b 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
+                self.stack.push(Word::Int((a==b)as i64));
                 self.program_counter += 1;
             }
             Instruction::SetGreater =>
@@ -303,7 +399,17 @@ impl Vm
                 }
                 let a = pop!(self.stack);
                 let b = pop!(self.stack);
-                self.stack.push((a>b)as i64);
+                let a = match a 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
+                let b = match b 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
+                self.stack.push(Word::Int((a>b)as i64));
                 self.program_counter += 1;
             }
             Instruction::SetLess =>
@@ -313,7 +419,17 @@ impl Vm
                 }
                 let a = pop!(self.stack);
                 let b = pop!(self.stack);
-                self.stack.push((a<b)as i64);
+                let a = match a 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
+                let b = match b 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
+                self.stack.push(Word::Int((a<b)as i64));
                 self.program_counter += 1;
             }
             Instruction::SetZero =>
@@ -322,7 +438,12 @@ impl Vm
                     return Fault::Underflow;
                 }
                 let a = pop!(self.stack);
-                self.stack.push((a==0)as i64);
+                let a = match a 
+                {
+                    Word::Int(val) => val,
+                    __  => return Fault::Bad_Operand,
+                };
+                self.stack.push(Word::Int((a==0)as i64));
                 self.program_counter += 1;
             }
         }
